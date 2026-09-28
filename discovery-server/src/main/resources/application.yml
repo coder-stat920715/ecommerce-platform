@@ -1,0 +1,18 @@
+server:
+  port: 8761
+spring:
+  application:
+    name: discovery-server
+eureka:
+  instance:
+    hostname: ${EUREKA_HOST:localhost}
+  client:
+    register-with-eureka: false      # standalone; in prod run 2+ peers that replicate to each other
+    fetch-registry: false
+  server:
+    enable-self-preservation: true
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,93 @@
+server:
+  port: 8083
+spring:
+  application:
+    name: payment-service
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  datasource:
+    url: ${PAYMENT_DB_URL:jdbc:postgresql://localhost:5435/paymentdb}
+    username: ${DB_USER:shop}
+    password: ${DB_PASSWORD:shop}
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none
+  flyway:
+    enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:29092}
+    producer:
+      acks: all
+      properties:
+        enable.idempotence: true
+        delivery.timeout.ms: 30000
+    consumer:
+      group-id: payment-service
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+    listener:
+      ack-mode: record
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+psp:
+  base-url: ${PSP_BASE_URL:http://localhost:8083/mock-psp}
+  connect-timeout: PT1S
+  read-timeout: PT3S
+  mock:
+    enabled: true          # local demo PSP served by this service; set false in real environments
+
+payment:
+  reconcile-after: PT1M     # PROCESSING intents older than this are re-checked with the PSP
+
+# Resilience4j: the annotations on PspClient reference the instance name "pspClient".
+# Decorator order (outer -> inner): Retry -> CircuitBreaker -> Bulkhead.
+resilience4j:
+  circuitbreaker:
+    instances:
+      pspClient:
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 20
+        minimumNumberOfCalls: 10
+        failureRateThreshold: 50
+        slowCallDurationThreshold: 2s
+        slowCallRateThreshold: 60
+        waitDurationInOpenState: 20s
+        permittedNumberOfCallsInHalfOpenState: 5
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        ignoreExceptions:
+          - com.shop.payment.psp.PaymentDeclinedException   # a decline is a valid answer, not a failure
+  retry:
+    instances:
+      pspClient:
+        maxAttempts: 3
+        waitDuration: 300ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        enableRandomizedWait: true
+        retryExceptions:
+          - java.io.IOException
+          - org.springframework.web.client.ResourceAccessException
+  bulkhead:
+    instances:
+      pspClient:
+        maxConcurrentCalls: 25
+        maxWaitDuration: 100ms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,circuitbreakers,retries
+  health:
+    circuitbreakers:
+      enabled: true

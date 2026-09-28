@@ -1,0 +1,5 @@
+saga:
+  pending-timeout: PT5M      # PENDING with no inventory answer -> cancel
+  payment-timeout: PT30M     # PAYMENT_PENDING must exceed payment reconciliation window
+outbox:
+  poll-interval-ms: 500

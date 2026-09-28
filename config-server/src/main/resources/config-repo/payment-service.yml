@@ -1,0 +1,4 @@
+psp:
+  base-url: ${PSP_BASE_URL:http://localhost:8083/mock-psp}
+  connect-timeout: PT1S
+  read-timeout: PT3S

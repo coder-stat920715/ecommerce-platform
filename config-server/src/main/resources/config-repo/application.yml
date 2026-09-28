@@ -1,0 +1,16 @@
+# Shared by every service
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics

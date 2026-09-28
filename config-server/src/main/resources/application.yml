@@ -1,0 +1,20 @@
+server:
+  port: 8888
+spring:
+  application:
+    name: config-server
+  profiles:
+    active: native          # dev: serve from classpath. Prod: switch to git (see README).
+  cloud:
+    config:
+      server:
+        native:
+          search-locations: classpath:/config-repo
+        # git:
+        #   uri: https://github.com/your-org/config-repo
+        #   default-label: main
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

@@ -1,0 +1,4 @@
+inventory:
+  reservation:
+    ttl: PT45M       # MUST exceed saga.payment-timeout, or stock can be released while a payment is still in flight
+    atomic: false    # true = single atomic UPDATE (best for hot SKUs); false = @Version optimistic lock

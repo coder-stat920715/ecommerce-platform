@@ -1,0 +1,115 @@
+server:
+  port: 8080
+spring:
+  application:
+    name: api-gateway
+  config:
+    import: "optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888}"
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  # PRODUCTION: validate against your IdP instead of the dev shared secret. Remove gateway.security.jwt-secret and set:
+  # security:
+  #   oauth2:
+  #     resourceserver:
+  #       jwt:
+  #         jwk-set-uri: https://idp.example.com/.well-known/jwks.json
+  #         issuer-uri: https://idp.example.com/
+  #         audiences: shop-api
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 10s
+      routes:
+        - id: checkout
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v1/checkout/**
+          filters:
+            - name: RequestRateLimiter          # tight: money-moving endpoint
+              args:
+                redis-rate-limiter.replenishRate: 5
+                redis-rate-limiter.burstCapacity: 10
+                redis-rate-limiter.requestedTokens: 1
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: orderCb
+                fallbackUri: forward:/fallback/order
+        - id: orders
+          uri: lb://order-service
+          predicates:
+            - Path=/api/v1/orders/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: orderCb
+                fallbackUri: forward:/fallback/order
+        - id: inventory
+          uri: lb://inventory-service
+          predicates:
+            - Path=/api/v1/inventory/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: inventoryCb
+                fallbackUri: forward:/fallback/inventory
+        - id: payments
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/v1/payments/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 10
+                redis-rate-limiter.burstCapacity: 20
+                key-resolver: "#{@userKeyResolver}"
+            - name: CircuitBreaker
+              args:
+                name: paymentCb
+                fallbackUri: forward:/fallback/payment
+
+gateway:
+  security:
+    # DEV ONLY (HS256 shared secret, min 32 bytes). Override with GATEWAY_JWT_SECRET; unset in production.
+    jwt-secret: ${GATEWAY_JWT_SECRET:dev-only-shared-secret-change-me-0123456789abcdef}
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      orderCb:     { slidingWindowSize: 20, minimumNumberOfCalls: 10, failureRateThreshold: 50, waitDurationInOpenState: 15s }
+      inventoryCb: { slidingWindowSize: 20, minimumNumberOfCalls: 10, failureRateThreshold: 50, waitDurationInOpenState: 15s }
+      paymentCb:   { slidingWindowSize: 20, minimumNumberOfCalls: 10, failureRateThreshold: 50, waitDurationInOpenState: 15s }
+  timelimiter:            # Spring Cloud's default is 1s, far too tight for checkout
+    instances:
+      orderCb:     { timeoutDuration: 8s }
+      inventoryCb: { timeoutDuration: 8s }
+      paymentCb:   { timeoutDuration: 8s }
+
+eureka:
+  client:
+    service-url:
+      defaultZone: ${EUREKA_URL:http://localhost:8761/eureka}
+  instance:
+    prefer-ip-address: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,gateway
